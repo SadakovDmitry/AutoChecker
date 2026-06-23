@@ -239,6 +239,9 @@ python3 -m auto_classifier.cli prepare \
 
 ### 1. Обучить валидатор
 
+Безопасный режим по умолчанию: модель автоматически ставит только `да`, а все
+остальное отправляет в `review`.
+
 ```bash
 python3 -m auto_classifier.cli train \
   --data "prepared_training.csv" \
@@ -247,6 +250,32 @@ python3 -m auto_classifier.cli train \
   --target-precision 0.95 \
   --embedding-model sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 ```
+
+Экспериментальный режим с автоматическим `нет` включается отдельным флагом:
+
+```bash
+python3 -m auto_classifier.cli train \
+  --data "prepared_training.csv" \
+  --out auto_classifier/models/kasko_v1_yesno \
+  --target-precision 0.95 \
+  --target-no-precision 0.97 \
+  --max-auto-no-p-correct 0.04 \
+  --enable-auto-no
+```
+
+`--target-precision` управляет автоматическим `да`.
+`--target-no-precision` управляет автоматическим `нет`; обычно его стоит делать строже, например `0.97`, чтобы модель ставила `нет` только в почти очевидных случаях.
+`--max-auto-no-p-correct` - дополнительный предохранитель: даже если обучающий подбор разрешил более широкий порог, `нет` будет ставиться только при `p_correct` не выше этого значения.
+
+После этого в `verify/evaluate` появятся решения:
+
+```text
+auto_yes -> auto_answer = да
+auto_no  -> auto_answer = нет
+review   -> auto_answer = review
+```
+
+Если модель обучена без `--enable-auto-no`, решений `auto_no` не будет.
 
 Если нужно быстро проверить пайплайн без embeddings:
 

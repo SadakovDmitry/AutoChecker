@@ -17,6 +17,7 @@ class ReasonRule:
 @dataclass
 class ValidatorConfig:
     target_precision: float = 0.95
+    target_no_precision: float = 0.97
     min_reason_samples: int = 8
     min_class_samples: int = 2
     max_lsa_components: int = 200
@@ -24,6 +25,8 @@ class ValidatorConfig:
     random_state: int = 42
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     use_embeddings: bool = True
+    enable_auto_no: bool = False
+    max_auto_no_p_correct: Optional[float] = None
     rules: Dict[str, ReasonRule] = field(default_factory=dict)
 
 

@@ -152,6 +152,48 @@ def choose_threshold(
     return best
 
 
+def choose_low_threshold(
+    y: Sequence[int],
+    probabilities: Sequence[float],
+    target_precision: float,
+) -> Tuple[float, float, float]:
+    """Choose p_correct cutoff for reliable automatic "no" decisions."""
+
+    y_arr = np.asarray(y, dtype=int)
+    p_arr = np.asarray(probabilities, dtype=float)
+    thresholds = sorted(set(float(x) for x in p_arr))
+    best = None
+    for threshold in thresholds:
+        mask = p_arr <= threshold
+        if not mask.any():
+            continue
+        no_precision = float((y_arr[mask] == 0).mean())
+        coverage = float(mask.mean())
+        if no_precision >= target_precision:
+            if best is None or coverage > best[2]:
+                best = (threshold, no_precision, coverage)
+    if best is None:
+        return -0.000001, 0.0, 0.0
+    return best
+
+
+def evaluate_low_threshold(
+    y: Sequence[int],
+    probabilities: Sequence[float],
+    threshold: float,
+) -> Tuple[float, float, float]:
+    """Evaluate p_correct cutoff for automatic "no" decisions."""
+
+    y_arr = np.asarray(y, dtype=int)
+    p_arr = np.asarray(probabilities, dtype=float)
+    mask = p_arr <= threshold
+    if not mask.any():
+        return -0.000001, 0.0, 0.0
+    no_precision = float((y_arr[mask] == 0).mean())
+    coverage = float(mask.mean())
+    return float(threshold), no_precision, coverage
+
+
 def _final_features(
     *,
     p_lsa: Sequence[float],
@@ -183,6 +225,9 @@ class ReasonValidator:
     threshold: float
     threshold_precision: float
     threshold_coverage: float
+    no_threshold: float
+    no_threshold_precision: float
+    no_threshold_coverage: float
     n_samples: int
     n_positive: int
     n_negative: int
@@ -286,15 +331,28 @@ class HybridValidator:
         final_oof = _oof_final_predictions(final_x, y, self.config)
         final_model = _fit_final_classifier(final_x, y, self.config.random_state)
 
+        enable_auto_no = bool(getattr(self.config, "enable_auto_no", False))
+
         if any("low_data" in item for item in warnings):
             threshold, threshold_precision, threshold_coverage = 1.000001, 0.0, 0.0
+            no_threshold, no_threshold_precision, no_threshold_coverage = -0.000001, 0.0, 0.0
         else:
             threshold, threshold_precision, threshold_coverage = choose_threshold(
                 y, final_oof, self.config.target_precision
             )
+            if enable_auto_no:
+                no_threshold, no_threshold_precision, no_threshold_coverage = choose_low_threshold(
+                    y, final_oof, self.config.target_no_precision
+                )
+            else:
+                no_threshold, no_threshold_precision, no_threshold_coverage = -0.000001, 0.0, 0.0
             if threshold > 1:
                 warnings.append(
-                    f"no_threshold_for_target_precision: target={self.config.target_precision}"
+                    f"no_auto_yes_threshold_for_target_precision: target={self.config.target_precision}"
+                )
+            if enable_auto_no and no_threshold < 0:
+                warnings.append(
+                    f"no_auto_no_threshold_for_target_precision: target={self.config.target_no_precision}"
                 )
 
         pos_mask = y == 1
@@ -304,6 +362,9 @@ class HybridValidator:
             threshold=float(threshold),
             threshold_precision=float(threshold_precision),
             threshold_coverage=float(threshold_coverage),
+            no_threshold=float(no_threshold),
+            no_threshold_precision=float(no_threshold_precision),
+            no_threshold_coverage=float(no_threshold_coverage),
             n_samples=int(len(frame)),
             n_positive=int(n_positive),
             n_negative=int(n_negative),
@@ -330,7 +391,10 @@ class HybridValidator:
                 unknown = reason_frame.copy()
                 unknown["p_correct"] = 0.0
                 unknown["threshold"] = 1.000001
+                unknown["yes_threshold"] = 1.000001
+                unknown["no_threshold"] = -0.000001
                 unknown["decision"] = "review"
+                unknown["auto_answer"] = "review"
                 unknown["p_lsa"] = 0.0
                 unknown["p_embedding"] = 0.0
                 unknown["nearest_positive_chat_id"] = ""
@@ -383,7 +447,16 @@ class HybridValidator:
             final_x,
             fallback=float(validator.n_positive / max(1, validator.n_samples)),
         )
-        decision = np.where(p_correct >= validator.threshold, "accept", "review")
+        yes_threshold = float(getattr(validator, "threshold", 1.000001))
+        no_threshold = float(getattr(validator, "no_threshold", -0.000001))
+        if no_threshold >= 0 and self.config.max_auto_no_p_correct is not None:
+            no_threshold = min(no_threshold, float(self.config.max_auto_no_p_correct))
+        decision = np.full(len(p_correct), "review", dtype=object)
+        decision[p_correct >= yes_threshold] = "auto_yes"
+        decision[p_correct <= no_threshold] = "auto_no"
+        auto_answer = np.full(len(p_correct), "review", dtype=object)
+        auto_answer[decision == "auto_yes"] = "да"
+        auto_answer[decision == "auto_no"] = "нет"
 
         nearest_pos_ids = []
         for idx in pos_idx:
@@ -403,8 +476,11 @@ class HybridValidator:
 
         out = frame.copy()
         out["p_correct"] = p_correct
-        out["threshold"] = validator.threshold
+        out["threshold"] = yes_threshold
+        out["yes_threshold"] = yes_threshold
+        out["no_threshold"] = no_threshold
         out["decision"] = decision
+        out["auto_answer"] = auto_answer
         out["p_lsa"] = p_lsa
         out["p_embedding"] = p_embedding
         out["nearest_positive_chat_id"] = nearest_pos_ids
@@ -421,9 +497,16 @@ class HybridValidator:
             rows.append(
                 {
                     "reason_id": reason_id,
-                    "threshold": validator.threshold,
-                    "threshold_precision": validator.threshold_precision,
-                    "threshold_coverage": validator.threshold_coverage,
+                    "auto_no_enabled": bool(getattr(self.config, "enable_auto_no", False)),
+                    "target_yes_precision": self.config.target_precision,
+                    "target_no_precision": self.config.target_no_precision,
+                    "max_auto_no_p_correct": self.config.max_auto_no_p_correct,
+                    "yes_threshold": validator.threshold,
+                    "yes_threshold_precision": validator.threshold_precision,
+                    "yes_threshold_coverage": validator.threshold_coverage,
+                    "no_threshold": getattr(validator, "no_threshold", -0.000001),
+                    "no_threshold_precision": getattr(validator, "no_threshold_precision", 0.0),
+                    "no_threshold_coverage": getattr(validator, "no_threshold_coverage", 0.0),
                     "n_samples": validator.n_samples,
                     "n_positive": validator.n_positive,
                     "n_negative": validator.n_negative,

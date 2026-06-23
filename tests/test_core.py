@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from auto_classifier.data import DataFormatError, load_tables, normalize_human_answer
-from auto_classifier.model import HybridValidator
+from auto_classifier.model import HybridValidator, choose_low_threshold, evaluate_low_threshold
 from auto_classifier.config import ValidatorConfig
 from auto_classifier.prepare import normalize_messages_table, prepare_training_data
 from auto_classifier.text import split_roles
@@ -146,6 +146,35 @@ class ModelTests(unittest.TestCase):
         rows.append({"chat_id": "low2", "chat_text": "client: отказа нет", "reason_id": "8", "да/нет": "нет"})
         return pd.DataFrame(rows)
 
+    def test_choose_low_threshold_uses_separate_precision_target(self):
+        threshold, precision, coverage = choose_low_threshold(
+            y=[1, 1, 0, 0],
+            probabilities=[0.9, 0.8, 0.2, 0.1],
+            target_precision=1.0,
+        )
+        self.assertEqual(threshold, 0.2)
+        self.assertEqual(precision, 1.0)
+        self.assertEqual(coverage, 0.5)
+
+        threshold, precision, coverage = choose_low_threshold(
+            y=[1, 1, 0, 0],
+            probabilities=[0.9, 0.8, 0.2, 0.1],
+            target_precision=1.01,
+        )
+        self.assertLess(threshold, 0.0)
+        self.assertEqual(precision, 0.0)
+        self.assertEqual(coverage, 0.0)
+
+    def test_evaluate_low_threshold_cap(self):
+        threshold, precision, coverage = evaluate_low_threshold(
+            y=[1, 0, 0, 1],
+            probabilities=[0.05, 0.03, 0.04, 0.20],
+            threshold=0.04,
+        )
+        self.assertEqual(threshold, 0.04)
+        self.assertEqual(precision, 1.0)
+        self.assertEqual(coverage, 0.5)
+
     def test_train_predict_and_low_data(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "train.csv"
@@ -163,10 +192,17 @@ class ModelTests(unittest.TestCase):
             loaded = HybridValidator.load(str(out_dir))
             predictions = loaded.predict(frame)
             self.assertIn("decision", predictions.columns)
+            self.assertIn("auto_answer", predictions.columns)
             self.assertIn("p_correct", predictions.columns)
-            self.assertTrue(set(predictions["decision"]).issubset({"accept", "review"}))
+            self.assertIn("yes_threshold", predictions.columns)
+            self.assertIn("no_threshold", predictions.columns)
+            self.assertTrue(set(predictions["decision"]).issubset({"auto_yes", "auto_no", "review"}))
+            self.assertTrue(set(predictions["auto_answer"]).issubset({"да", "нет", "review"}))
+            self.assertNotIn("auto_no", set(predictions["decision"]))
+            self.assertTrue((predictions["no_threshold"] < 0).all())
             low_data = loaded.reason_validators["8"]
             self.assertGreater(low_data.threshold, 1.0)
+            self.assertLess(low_data.no_threshold, 0.0)
 
 
 if __name__ == "__main__":

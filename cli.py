@@ -35,10 +35,30 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--out", required=True, help="Directory to save trained model.")
     train.add_argument("--target-precision", type=float, default=0.95)
     train.add_argument(
+        "--target-no-precision",
+        type=float,
+        default=0.97,
+        help="Target precision for automatic 'нет' decisions when --enable-auto-no is used.",
+    )
+    train.add_argument(
         "--embedding-model",
         default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     )
     train.add_argument("--no-embeddings", action="store_true", help="Disable sentence-transformers.")
+    train.add_argument(
+        "--enable-auto-no",
+        action="store_true",
+        help="Enable automatic 'нет' decisions. Default is safer auto_yes/review mode.",
+    )
+    train.add_argument(
+        "--max-auto-no-p-correct",
+        type=float,
+        default=None,
+        help=(
+            "Optional extra safety cap for automatic 'нет': accept auto_no only when "
+            "p_correct is at or below this value, for example 0.04."
+        ),
+    )
     train.add_argument("--rules", default=None, help="Optional YAML rules file.")
     train.add_argument("--min-reason-samples", type=int, default=8)
     train.add_argument("--min-class-samples", type=int, default=2)
@@ -95,10 +115,13 @@ def cmd_train(args: argparse.Namespace) -> int:
     rules = load_rules(args.rules)
     config = ValidatorConfig(
         target_precision=args.target_precision,
+        target_no_precision=args.target_no_precision,
         min_reason_samples=args.min_reason_samples,
         min_class_samples=args.min_class_samples,
         embedding_model=args.embedding_model,
         use_embeddings=not args.no_embeddings,
+        enable_auto_no=args.enable_auto_no,
+        max_auto_no_p_correct=args.max_auto_no_p_correct,
         rules=rules,
     )
     frame = load_tables(

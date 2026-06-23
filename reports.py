@@ -27,20 +27,35 @@ def build_evaluation_report(predictions: pd.DataFrame) -> tuple[pd.DataFrame, pd
     labeled = predictions[predictions["human_label"].isin([0, 1])].copy()
     rows = []
     for reason_id, group in labeled.groupby("reason_id", sort=True):
-        accepted = group[group["decision"] == "accept"]
+        auto_yes = group[group["decision"].isin(["auto_yes", "accept"])]
+        auto_no = group[group["decision"] == "auto_no"]
+        auto_total = len(auto_yes) + len(auto_no)
+        review = len(group) - auto_total
         rows.append(
             {
                 "reason_id": reason_id,
                 "rows": len(group),
-                "accepted": len(accepted),
-                "coverage": len(accepted) / len(group) if len(group) else 0.0,
-                "accepted_precision": accepted["human_label"].mean() if len(accepted) else 0.0,
+                "auto_yes": len(auto_yes),
+                "auto_no": len(auto_no),
+                "review": review,
+                "auto_coverage": auto_total / len(group) if len(group) else 0.0,
+                "auto_yes_precision": auto_yes["human_label"].mean() if len(auto_yes) else 0.0,
+                "auto_no_precision": (auto_no["human_label"] == 0).mean() if len(auto_no) else 0.0,
                 "overall_positive_rate": group["human_label"].mean() if len(group) else 0.0,
-                "threshold": group["threshold"].iloc[0] if len(group) else None,
+                "yes_threshold": group["yes_threshold"].iloc[0] if "yes_threshold" in group and len(group) else None,
+                "no_threshold": group["no_threshold"].iloc[0] if "no_threshold" in group and len(group) else None,
             }
         )
     summary = pd.DataFrame(rows)
-    errors = labeled[(labeled["decision"] == "accept") & (labeled["human_label"] == 0)].copy()
+    false_yes = labeled[
+        (labeled["decision"].isin(["auto_yes", "accept"])) & (labeled["human_label"] == 0)
+    ].copy()
+    false_yes["error_type"] = "false_auto_yes"
+    false_no = labeled[
+        (labeled["decision"] == "auto_no") & (labeled["human_label"] == 1)
+    ].copy()
+    false_no["error_type"] = "false_auto_no"
+    errors = pd.concat([false_yes, false_no], ignore_index=True)
     errors = errors.sort_values(["reason_id", "p_correct"], ascending=[True, False])
     return summary, errors
 
