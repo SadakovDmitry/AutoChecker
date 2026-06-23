@@ -1,0 +1,15 @@
+# Optional lexical hints. Keys are classifier reason ids.
+# These rules are not hard filters; they become numeric features.
+#
+# Example:
+# reasons:
+#   "5":
+#     keywords:
+#       - страховка багажа
+#       - подписка pro
+#     client_required_keywords:
+#       - багаж
+#     operator_only_keywords:
+#       - оформляем страховку багажа
+
+reasons: {}
