@@ -115,6 +115,131 @@ def _load_raw_tables(
     return frame
 
 
+def _series_has_chat_ids(values: pd.Series) -> bool:
+    return values.fillna("").astype(str).str.match(r"^T\d+").any()
+
+
+def _copy_if_missing(frame: pd.DataFrame, target: str, source: str) -> None:
+    if source not in frame.columns:
+        return
+    source_values = frame[source]
+    if target not in frame.columns:
+        frame[target] = source_values
+        return
+    target_values = frame[target].fillna("").astype(str).str.strip()
+    frame[target] = frame[target].where(target_values != "", source_values)
+
+
+def _column_position(name: object) -> Optional[int]:
+    text = str(name)
+    if text == "rn":
+        return 0
+    if text.startswith("Unnamed: "):
+        try:
+            return int(text.split(":", 1)[1].strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _non_empty(values: pd.Series) -> pd.Series:
+    return values.fillna("").astype(str).str.strip()
+
+
+def _column_has_links(values: pd.Series) -> bool:
+    return _non_empty(values).str.contains(r"https?://", regex=True).any()
+
+
+def _column_has_answers(values: pd.Series) -> bool:
+    text = _non_empty(values)
+    non_empty = text[text != ""]
+    if non_empty.empty or _column_has_reason_numbers(values):
+        return False
+    answer_like = non_empty.str.lower().str.fullmatch(r"(да|дa|нет|yes|no|y|n)\s*\?*")
+    return answer_like.mean() >= 0.5
+
+
+def _column_has_reason_numbers(values: pd.Series) -> bool:
+    text = _non_empty(values)
+    non_empty = text[text != ""]
+    if non_empty.empty:
+        return False
+    return non_empty.str.fullmatch(r"\d+(\.\d+)?(,\s*\d+(\.\d+)?)*").mean() >= 0.7
+
+
+def _closest_column(columns: list[str], target_position: Optional[int]) -> Optional[str]:
+    if not columns:
+        return None
+    if target_position is None:
+        return columns[0]
+    return min(
+        columns,
+        key=lambda column: abs((_column_position(column) or 10_000) - target_position),
+    )
+
+
+def _repair_positional_label_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Recover label columns from sheets exported without headers."""
+
+    if frame.empty:
+        return frame
+    repaired = frame.copy()
+    columns = list(repaired.columns)
+
+    has_chat_column = _find_column(columns, CHAT_ID_ALIASES)
+    if has_chat_column and _series_has_chat_ids(repaired[has_chat_column]):
+        return repaired
+
+    positional_columns = [
+        column for column in columns if _column_position(column) is not None
+    ]
+    chat_columns = [
+        column for column in positional_columns if _series_has_chat_ids(repaired[column])
+    ]
+    if not chat_columns:
+        return repaired
+
+    chat_column = chat_columns[0]
+    link_columns = [
+        column for column in positional_columns if _column_has_links(repaired[column])
+    ]
+    answer_columns = [
+        column for column in positional_columns if _column_has_answers(repaired[column])
+    ]
+    reason_columns = [
+        column
+        for column in positional_columns
+        if column not in {chat_column, "rn", *link_columns, *answer_columns}
+        and _column_has_reason_numbers(repaired[column])
+    ]
+
+    link_column = link_columns[0] if link_columns else None
+    link_position = _column_position(link_column) if link_column else None
+    answer_column = answer_columns[0] if answer_columns else None
+    reason_column = _closest_column(reason_columns, link_position)
+
+    _copy_if_missing(repaired, "comm_id", chat_column)
+    if link_column:
+        _copy_if_missing(repaired, "link", link_column)
+    if reason_column:
+        _copy_if_missing(repaired, "reason_number", reason_column)
+    if answer_column:
+        _copy_if_missing(repaired, "да/нет", answer_column)
+        answer_position = _column_position(answer_column)
+        comment_column = next(
+            (
+                column
+                for column in positional_columns
+                if _column_position(column) == (answer_position or -10) + 1
+            ),
+            None,
+        )
+        if comment_column:
+            _copy_if_missing(repaired, "comment", comment_column)
+
+    return repaired
+
+
 def _normalize_role(value: object) -> str:
     text = clean_text(value).lower()
     if text in {"client", "customer", "user", "клиент"}:
@@ -318,6 +443,7 @@ def prepare_training_data(
 ) -> tuple[pd.DataFrame, PrepareStats]:
     labels_raw = _load_raw_tables(labels_paths, source_sheet=labels_sheet)
     messages_raw = _load_raw_tables(messages_paths, source_sheet=messages_sheet)
+    labels_raw = _repair_positional_label_columns(labels_raw)
 
     labels = normalize_table(
         labels_raw,

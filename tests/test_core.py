@@ -16,7 +16,8 @@ class DataTests(unittest.TestCase):
         self.assertEqual(normalize_human_answer("да"), 1)
         self.assertEqual(normalize_human_answer("нет"), 0)
         self.assertEqual(normalize_human_answer("0"), 0)
-        self.assertIsNone(normalize_human_answer("да?"))
+        self.assertEqual(normalize_human_answer("да?"), 1)
+        self.assertEqual(normalize_human_answer("нет?"), 0)
         self.assertIsNone(normalize_human_answer(""))
 
     def test_role_split(self):

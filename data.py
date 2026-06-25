@@ -34,7 +34,7 @@ REASON_ALIASES = (
     "причина",
     "номер причины",
 )
-ANSWER_ALIASES = ("human_answer", "да/нет", "yes/no", "answer", "is_correct")
+ANSWER_ALIASES = ("human_answer", "да/нет", "да", "yes/no", "answer", "is_correct")
 COMMENT_ALIASES = ("comment", "комментарий", "коментарий", "комментарии")
 LINK_ALIASES = ("link", "url", "ссылка")
 
@@ -81,13 +81,17 @@ def split_reason_ids(value: object) -> List[str]:
 
 
 def normalize_human_answer(value: object) -> Optional[int]:
-    """Return 1 for yes, 0 for no, None for uncertain/missing."""
+    """Return 1 for yes, 0 for no, None for missing/ambiguous values."""
 
     if value is None or (isinstance(value, float) and pd.isna(value)):
         return None
     text = str(value).strip().lower()
     if not text:
         return None
+    if re.fullmatch(r"да\s*\?+", text):
+        return 1
+    if re.fullmatch(r"нет\s*\?+", text):
+        return 0
     if "?" in text:
         return None
     if text in {"1", "true", "yes", "y", "да", "дa"}:
