@@ -1,0 +1,82 @@
+# Stable subreason mapping.
+#
+# Why this exists:
+# reason_id is only a number inside one prompt iteration. If reasons are
+# renamed, reordered, split, or merged, the same number can mean a different
+# thing. Use subreason_key as the stable semantic id for training/evaluation.
+#
+# Rules:
+# - files/aliases identify the dataset by _source_file.
+# - iterations use the Excel sheet name from _source_sheet.
+# - each reason_id maps to a stable subreason_key string.
+# - merged_from is documentation for humans; the actual merge happens because
+#   several old reason_id values map to the same new key.
+
+datasets:
+  kasko_oformlenie:
+    files:
+      - "КАСКО - Оформление заявки.xlsx"
+      - "kasko_oformlenie_auto_train.csv"
+      - "kasko_oformlenie_auto_val.csv"
+    iterations:
+      "итерация 5":
+        reasons:
+          "1": cost_mismatch
+          "2": competitor_price
+          "3": bot_delay
+          "4": autocredit_requirements
+          "5": chat_calculation
+          "6": terms_franchise_gap_risks
+          "7": monthly_subscription_installment
+          "8": risk_assessment_rejection
+      "итерация 6":
+        reasons:
+          "1": cost_mismatch
+          "2": competitor_price
+          "3": bot_delay
+          "4": autocredit_requirements
+          "5": chat_calculation
+          "6": terms_franchise_gap_risks
+          "7": monthly_subscription_installment
+          "8": risk_assessment_rejection
+
+  kasko_uregulirovanie:
+    files:
+      - "КАСКО - Урегулирование убытков.xlsx"
+      - "kasko_uregulirovanie_auto_train.csv"
+      - "kasko_uregulirovanie_auto_val.csv"
+    iterations:
+      # Old prompt: three separate but semantically close reasons.
+      "итерация 1":
+        reasons:
+          "1":
+            key: unclear_status_and_communication
+            merged_from:
+              - no_manager_contact
+          "4":
+            key: unclear_status_and_communication
+            merged_from:
+              - settlement_delay
+          "7":
+            key: unclear_status_and_communication
+            merged_from:
+              - unclear_status
+          "2": service_selection_change
+          "3": claim_registration_app
+          "5": terms_franchise
+          "6": stone_glass_damage
+          "9": repair_quality_service
+      # New prompt: merged reason already has one reason_id.
+      "итерация 2":
+        reasons:
+          "1":
+            key: unclear_status_and_communication
+            merged_from:
+              - no_manager_contact
+              - settlement_delay
+              - unclear_status
+          "2": service_selection_change
+          "3": claim_registration_app
+          "4": terms_franchise
+          "5": stone_glass_damage
+          "6": repair_quality_service

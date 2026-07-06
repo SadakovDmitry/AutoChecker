@@ -1,0 +1,228 @@
+datasets:
+  kasko_izmenenie:
+    files:
+      - "КАСКО - Изменение договора.xlsx"
+      - "kasko_izmenenie_auto_train.csv"
+      - "kasko_izmenenie_auto_val.csv"
+    iterations:
+      "Sheet0":
+        reasons:
+          "1": {key: drivers_list_change, name: "Изменение списка водителей"}
+          "2": {key: vehicle_registration_data_change, name: "Изменение регистрационных данных"}
+          "3": {key: beneficiary_change, name: "Изменение выгодоприобретателя"}
+          "4": {key: limit_or_start_mileage_change, name: "Корректировка лимита или стартового пробега"}
+          "5": {key: unpaid_draft_policy_change_delete, name: "Внесение изменений или удаление неоплаченного проекта"}
+          "6": {key: driver_license_change, name: "Изменение водительского удостоверения"}
+          "7": {key: policy_data_error, name: "Ошибка в данных полиса"}
+          "8": {key: policy_change_other, name: "Прочие изменения полиса"}
+          "9": {key: policy_change_other, name: "Прочие изменения полиса"}
+
+  kasko_rastorzhenie:
+    files:
+      - "КАСКО - Расторжение договора.xlsx"
+      - "kasko_rastorzhenie_auto_train.csv"
+      - "kasko_rastorzhenie_auto_val.csv"
+    iterations:
+      "итерация 1 и 2":
+        reasons:
+          "1": {key: casco_drive_autorenewal_disable, name: "Отключение автопродления КАСКО Драйв"}
+          "2": {key: refund_and_policy_cancellation, name: "Возврат средств и расторжение договора"}
+          "3": {key: unauthorized_auto_charge, name: "Автоматическое списание без согласия"}
+          "4": {key: autocredit_extra_services_refusal, name: "Отказ от дополнительных услуг при автокредите"}
+          "5": {key: car_sale_policy_cancellation, name: "Продажа автомобиля и расторжение полиса"}
+          "6": {key: policy_errors_and_terms, name: "Ошибки в оформлении и условиях полиса"}
+          "7": {key: preinsurance_inspection_problem, name: "Проблемы с предстраховым осмотром"}
+          "8": {key: unpaid_draft_policy_delete, name: "Удаление неоплаченного проекта полиса"}
+          "9": {key: refund_terms_and_processing, name: "Запросы о возврате средств и сроках обработки"}
+      "итерация 3":
+        reasons:
+          "1": {key: refund_and_policy_cancellation, name: "Возврат средств и расторжение договора"}
+          "2": {key: unauthorized_auto_charge, name: "Автоматическое списание без согласия"}
+          "3": {key: autocredit_extra_services_refusal, name: "Отказ от дополнительных услуг при автокредите"}
+          "4": {key: car_sale_policy_cancellation, name: "Продажа автомобиля и расторжение полиса"}
+          "5": {key: policy_errors_and_terms, name: "Ошибки в оформлении и условиях полиса"}
+          "6": {key: preinsurance_inspection_problem, name: "Проблемы с предстраховым осмотром"}
+          "7": {key: unpaid_draft_policy_delete, name: "Удаление неоплаченного проекта полиса"}
+          "8": {key: refund_terms_and_processing, name: "Запросы о возврате средств и сроках обработки"}
+          "9": {key: casco_drive_autorenewal_disable, name: "Отключение автопродления КАСКО Драйв"}
+
+  kasko_uregulirovanie:
+    files:
+      - "КАСКО - Урегулирование убытков.xlsx"
+      - "kasko_uregulirovanie_auto_train.csv"
+      - "kasko_uregulirovanie_auto_val.csv"
+    iterations:
+      "итерация 1":
+        reasons:
+          "1": {key: unclear_status_and_communication, name: "Неясный статус страхового случая и сложности с коммуникацией", merged_from: [no_manager_contact]}
+          "2": {key: service_selection_change, name: "Проблемы с выбором или заменой автосервиса"}
+          "3": {key: claim_registration_app, name: "Регистрация страхового случая в приложении"}
+          "4": {key: unclear_status_and_communication, name: "Неясный статус страхового случая и сложности с коммуникацией", merged_from: [settlement_delay]}
+          "5": {key: terms_franchise, name: "Вопросы по условиям страхования и франшизе"}
+          "6": {key: stone_glass_damage, name: "Повреждение стекла от камня"}
+          "7": {key: unclear_status_and_communication, name: "Неясный статус страхового случая и сложности с коммуникацией", merged_from: [unclear_status]}
+          "8": {key: missing_documents, name: "Требование документов или справок, которых нет"}
+          "9": {key: repair_quality_service, name: "Жалобы на качество ремонта и выбор СТО"}
+      "итерация 2":
+        reasons:
+          "1": {key: unclear_status_and_communication, name: "Неясный статус страхового случая и сложности с коммуникацией"}
+          "2": {key: service_selection_change, name: "Проблемы с выбором или заменой автосервиса"}
+          "3": {key: claim_registration_app, name: "Регистрация страхового случая в приложении"}
+          "4": {key: terms_franchise, name: "Вопросы по условиям страхования и франшизе"}
+          "5": {key: stone_glass_damage, name: "Повреждение стекла от камня"}
+          "6": {key: repair_quality_service, name: "Жалобы на качество ремонта и выбор СТО"}
+
+  kasko_oformlenie:
+    files:
+      - "КАСКО - Оформление заявки.xlsx"
+      - "kasko_oformlenie_auto_train.csv"
+      - "kasko_oformlenie_auto_val.csv"
+    iterations:
+      "итерация 1":
+        reasons:
+          "1": {key: cost_mismatch, name: "Несовпадение итоговой стоимости и ожиданий клиента"}
+          "2": {key: competitor_price, name: "Высокая стоимость страховки по сравнению с другими компаниями"}
+          "3": {key: bot_delay, name: "Сложности с оформлением через чат-бота и задержки"}
+          "4": {key: autocredit_requirements, name: "Оформление страховки для автокредита"}
+          "5": {key: chat_calculation, name: "Расчет и оформление КАСКО в чате"}
+          "6": {key: terms_franchise_gap_risks, name: "Разъяснение условий: франшиза, GAP, риски"}
+          "7": {key: monthly_subscription_installment, name: "Оформление по подписке или рассрочке"}
+          "8": {key: risk_assessment_rejection, name: "Отказ по результатам комплексной оценки риска"}
+          "9": {key: preinsurance_inspection_need, name: "Необходимость осмотра автомобиля"}
+      "итерация 2":
+        reasons:
+          "1": {key: cost_mismatch, name: "Несовпадение итоговой стоимости и ожиданий клиента"}
+          "2": {key: competitor_price, name: "Высокая стоимость страховки по сравнению с другими компаниями"}
+          "3": {key: bot_delay, name: "Сложности с оформлением через чат-бота и задержки"}
+          "4": {key: autocredit_requirements, name: "Оформление страховки для автокредита"}
+          "5": {key: chat_calculation, name: "Расчет и оформление КАСКО в чате"}
+          "6": {key: terms_franchise_gap_risks, name: "Разъяснение условий: франшиза, GAP, риски"}
+          "7": {key: monthly_subscription_installment, name: "Оформление по подписке или рассрочке"}
+          "8": {key: risk_assessment_rejection, name: "Отказ по результатам комплексной оценки риска"}
+      "итерация 3.1":
+        reasons:
+          "1": {key: cost_mismatch, name: "Несовпадение итоговой стоимости с ожиданиями или прошлыми расчетами"}
+          "2": {key: competitor_price, name: "Высокая стоимость страховки по сравнению с другими компаниями"}
+          "3": {key: bot_delay, name: "Сложности с оформлением через чат-бота и задержки"}
+          "4": {key: autocredit_requirements, name: "Оформление страховки для автокредита"}
+          "5": {key: chat_calculation, name: "Расчет и оформление КАСКО в чате"}
+          "6": {key: terms_franchise_gap_risks, name: "Разъяснение условий: франшиза, GAP, риски"}
+          "7": {key: monthly_subscription_installment, name: "Оформление по подписке или рассрочке"}
+          "8": {key: risk_assessment_rejection, name: "Отказ по результатам комплексной оценки риска"}
+
+  kasko_prolongacii:
+    files:
+      - "КАСКО - Пролонгации полиса.xlsx"
+      - "kasko_prolongacii_auto_train.csv"
+      - "kasko_prolongacii_auto_val.csv"
+    iterations:
+      "итерация 1":
+        reasons:
+          "1": {key: competitor_price_renewal, name: "Сравнение с предложениями других страховых компаний"}
+          "2": {key: renewal_terms_change, name: "Желание изменить условия полиса"}
+          "3": {key: app_interface_calculation_problem, name: "Проблемы с интерфейсом и расчетом в приложении"}
+          "4": {key: autocredit_rate_renewal, name: "Продление для сохранения льготной ставки по автокредиту"}
+          "5": {key: minimal_risks_renewal, name: "Продление с минимальными рисками"}
+          "6": {key: discounts_cashback_renewal, name: "Скидки и кэшбэк при продлении"}
+          "7": {key: payment_inspection_problem, name: "Проблемы с оплатой и осмотром автомобиля"}
+          "8": {key: renewal_price_growth, name: "Рост стоимости полиса при продлении"}
+          "9": {key: casco_drive_autorenewal_disable, name: "Отключение автопродления КАСКО Драйв"}
+      "итерация 4":
+        reasons:
+          "1": {key: competitor_price_renewal, name: "Сравнение с предложениями других страховых компаний"}
+          "2": {key: renewal_terms_change, name: "Желание изменить условия полиса"}
+          "3": {key: app_interface_calculation_problem, name: "Проблемы с интерфейсом и расчетом в приложении"}
+          "4": {key: minimal_risks_renewal, name: "Продление с минимальными рисками"}
+          "5": {key: discounts_cashback_renewal, name: "Скидки и кэшбэк при продлении"}
+          "6": {key: payment_inspection_problem, name: "Проблемы с оплатой и осмотром автомобиля"}
+          "7": {key: renewal_price_growth, name: "Рост стоимости полиса при продлении"}
+
+  vzr_oformlenie:
+    files:
+      - "ВЗР - Оформление.xlsx"
+      - "vzr_oformlenie_auto_train.csv"
+      - "vzr_oformlenie_auto_val.csv"
+    iterations:
+      "итерация 1":
+        reasons:
+          "1": {key: travel_participants_change, name: "Добавление или изменение участников в страховке"}
+          "2": {key: travel_terms_coverage, name: "Уточнение условий и покрытия страховки"}
+          "3": {key: paid_travel_policy, name: "Оформление платной страховки"}
+          "4": {key: special_risks_travel_policy, name: "Оформление страховки с особыми рисками"}
+          "5": {key: sport_active_travel_policy, name: "Спортивная или активная страховка"}
+          "6": {key: policy_display_access_problem, name: "Проблемы с получением и отображением полиса"}
+          "7": {key: travel_policy_data_correction, name: "Исправление данных в страховке"}
+          "8": {key: already_traveling_policy, name: "Оформление страховки при уже начавшейся поездке"}
+          "9": {key: free_travel_policy, name: "Оформление бесплатной страховки для путешествий"}
+
+  vzr_izmenenia:
+    files:
+      - "ВЗР - Изменения.xlsx"
+      - "vzr_izmenenia_auto_train.csv"
+      - "vzr_izmenenia_auto_val.csv"
+    iterations:
+      "итерация 2":
+        reasons:
+          "1": {key: travel_participants_composition_change, name: "Изменение состава участников полиса"}
+          "1.4": {key: travel_participants_composition_change, name: "Изменение состава участников полиса"}
+          "1.5": {key: travel_participants_composition_change, name: "Изменение состава участников полиса"}
+          "2": {key: travel_participants_composition_change, name: "Изменение состава участников полиса"}
+          "3": {key: travel_policy_data_correction, name: "Исправление ошибок в данных"}
+          "4": {key: travel_participants_composition_change, name: "Изменение состава участников полиса"}
+          "4.5": {key: travel_participants_composition_change, name: "Изменение состава участников полиса"}
+          "5": {key: travel_policy_terms_clarification, name: "Уточнение условий действия страховки"}
+          "6": {key: travel_participants_composition_change, name: "Изменение состава участников полиса"}
+          "7": {key: new_participant_activation_terms, name: "Условия активации страховки для новых участников"}
+          "8": {key: travel_policy_activation, name: "Оформление или активация страховки"}
+          "9": {key: travel_participants_composition_change, name: "Изменение состава участников полиса"}
+
+  vzr_prolongacii:
+    files:
+      - "ВЗР - Пролонгации.xlsx"
+      - "vzr_prolongacii_auto_train.csv"
+      - "vzr_prolongacii_auto_val.csv"
+    iterations:
+      "Sheet0":
+        reasons:
+          "1": {key: all_airlines_travel_policy_renewal, name: "Продление страховки путешественника по карте All Airlines"}
+          "2": {key: auto_renewal_expected_missing, name: "Отсутствие автопродления или ожидание автопродления"}
+          "3": {key: new_policy_instead_renewal, name: "Оформление нового полиса вместо продления"}
+          "4": {key: renewal_abroad_already_traveling, name: "Продление при нахождении за границей"}
+          "5": {key: baggage_pro_renewal, name: "Продление страховки багажа по подписке Pro"}
+          "6": {key: visa_schengen_renewal, name: "Продление для подачи на визу или шенген"}
+          "7": {key: vzr_365_long_stay_renewal_unavailable, name: "Невозможность продления ВЗР 365"}
+          "8": {key: policy_display_access_problem, name: "Проблемы с отображением и доступом к полису"}
+          "9": {key: family_insured_people_renewal, name: "Продление для семьи или добавление застрахованных"}
+
+  vzr_rastorzhenia:
+    files:
+      - "ВЗР - Расторжения.xlsx"
+      - "vzr_rastorzhenia_auto_train.csv"
+      - "vzr_rastorzhenia_auto_val.csv"
+    iterations:
+      "итерация 2":
+        reasons:
+          "1": {key: free_travel_insurance_keep_after_explanation, name: "Клиент хотел отказаться, но оставил страховку после пояснения"}
+          "2": {key: free_travel_insurance_disable, name: "Желание отключить бесплатное страхование"}
+          "3": {key: travel_insurance_terms_consultation, name: "Уточнение условий и действия страховки"}
+          "4": {key: travel_insurance_cancel_after_return_or_trip_cancel, name: "Отказ после возвращения или отмены поездки"}
+          "5": {key: paid_travel_policy_cancellation, name: "Расторжение платной страховки путешественника"}
+          "6": {key: travel_policy_cancellation_other, name: "Прочие вопросы расторжения ВЗР"}
+
+  vzr_uregulirovanie:
+    files:
+      - "ВЗР - Урегулирование.xlsx"
+      - "vzr_uregulirovanie_auto_train.csv"
+      - "vzr_uregulirovanie_auto_val.csv"
+    iterations:
+      "итерация 1":
+        reasons:
+          "1": {key: medical_help_abroad, name: "Медицинская помощь за границей"}
+          "2": {key: medical_expense_reimbursement, name: "Возмещение расходов по медицинским услугам"}
+          "3": {key: flight_delay_compensation, name: "Компенсация при задержке авиарейса"}
+          "4": {key: medical_documents_request, name: "Документы для медицинского страхового случая"}
+          "5": {key: baggage_loss_or_delay, name: "Утрата или задержка багажа"}
+          "6": {key: baggage_loss_or_delay, name: "Утрата или задержка багажа"}
+          "7": {key: travel_insurance_terms_consultation, name: "Уточнение условий страхового случая"}
+          "8": {key: manager_contact_or_processing_delay, name: "Несвоевременная связь или задержка обработки"}
+          "9": {key: technical_problem_application_claim, name: "Технические проблемы с приложением или подачей заявки"}

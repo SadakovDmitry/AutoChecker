@@ -58,55 +58,139 @@ reason_id=5, p_correct=0.48, decision=review
 `review` тоже не значит "разметка неверная". Это значит, что валидатору не
 хватило уверенности, и строку нужно оставить человеку.
 
-## Установка
+## Как начать после копирования с GitHub
 
-Запускать команды нужно из корня проекта:
+Этот раздел рассчитан на человека, который скачал проект с GitHub и запускает его на своем компьютере.
+
+Важная техническая деталь: CLI запускается как Python-пакет `auto_classifier`, поэтому папка с кодом должна называться `auto_classifier`, а команды `python -m auto_classifier.cli ...` нужно выполнять из родительской папки.
+
+### 1. Склонировать репозиторий
+
+Рекомендуемый вариант:
 
 ```bash
-cd "/Users/d.sadakov/Documents/Т-банк"
+mkdir AutoChecker-work
+cd AutoChecker-work
+git clone https://github.com/SadakovDmitry/AutoChecker.git auto_classifier
 ```
 
-Лучше создать отдельное окружение внутри папки `auto_classifier`:
+После этого структура должна быть такой:
+
+```text
+AutoChecker-work/
+  auto_classifier/
+    README.md
+    USER_GUIDE.md
+    cli.py
+    data.py
+    ...
+```
+
+Все команды ниже выполняются из папки `AutoChecker-work`, то есть из родительской папки для `auto_classifier`.
+
+Если вы скачали ZIP-архив с GitHub, распакуйте его и переименуйте папку с кодом в `auto_classifier`, затем перейдите в родительскую папку:
 
 ```bash
-python3 -m venv auto_classifier/.venv
-source auto_classifier/.venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r auto_classifier/requirements.txt
+mkdir AutoChecker-work
+# распакуйте ZIP внутрь AutoChecker-work и переименуйте папку в auto_classifier
+cd AutoChecker-work
 ```
 
-Если ты уже находишься внутри папки `auto_classifier`, команды будут такими:
+### 2. Создать виртуальное окружение
+
+macOS / Linux:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-cd ..
+```
+
+Windows:
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+```
+
+Если создание окружения было прервано через `Ctrl+C`, запустите `python3 -m venv .venv` еще раз. Иначе окружение может создаться без `pip` или без файла активации.
+
+### 3. Установить зависимости
+
+Быстрый вариант без embeddings:
+
+```bash
+pip install -r auto_classifier/requirements-minimal.txt
+```
+
+После этого обучайте модель с флагом `--no-embeddings`. Такой режим работает на `TF-IDF + LSA + retrieval + rules` и не требует тяжелых ML-зависимостей.
+
+Полный вариант с sentence embeddings:
+
+```bash
+pip install -r auto_classifier/requirements.txt
+```
+
+Он ставит `sentence-transformers` и позволяет использовать embedding-модель `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`. Первая загрузка модели может занять время и потребует интернет.
+
+Если `sentence-transformers` или embedding-модель недоступны, программа все равно работает в fallback-режиме без embeddings. Для явного запуска без embeddings используйте `--no-embeddings`.
+
+### 4. Проверить, что CLI запускается
+
+```bash
 python -m auto_classifier.cli --help
 ```
 
-Важно: если команда `python3 -m venv .venv` была прервана через `Ctrl+C`,
-окружение может создаться не полностью: например, без `.venv/bin/activate` или
-без `pip`. В таком случае просто запустите `python3 -m venv .venv` еще раз из
-той же папки.
+Если команда показывает список подкоманд `prepare`, `train`, `verify`, `evaluate`, установка прошла нормально.
 
-Полный `requirements.txt` ставит `sentence-transformers`, а это может быть
-тяжелая установка. Для быстрого старта без embeddings можно поставить
-минимальные зависимости:
+### 5. Подготовить свои данные
 
-```bash
-pip install -r requirements-minimal.txt
+Репозиторий не содержит реальные чаты, Excel-файлы и обученные модели. Нужно положить свои файлы локально, например:
+
+```text
+AutoChecker-work/
+  my_data/
+    labels.xlsx
+    messages.xlsx
+    new_classifier_results.xlsx
 ```
 
-После этого обучайте модель с флагом `--no-embeddings`.
+`my_data/` можно назвать как угодно. Главное - не коммитить туда реальные чаты, если проект хранится в GitHub.
 
-Если `sentence-transformers` или embedding-модель недоступны, программа все
-равно работает в fallback-режиме `TF-IDF + LSA + retrieval`. Для явного запуска
-без embeddings можно добавить `--no-embeddings`.
+### 6. Типовой рабочий сценарий
 
-Важно: чтение `.xlsx` поддерживается даже без `openpyxl` через fallback, но для
-записи `.xlsx` нужен `openpyxl`. Если его нет, используйте `.csv` в `--output`.
+Собрать обучающий датасет из разметки и текстовок:
+
+```bash
+python -m auto_classifier.cli prepare \
+  --labels "my_data/labels.xlsx" \
+  --messages "my_data/messages.xlsx" \
+  --output "my_data/prepared_training.csv"
+```
+
+Обучить модель без embeddings:
+
+```bash
+python -m auto_classifier.cli train \
+  --data "my_data/prepared_training.csv" \
+  --out "models/model_v1" \
+  --target-precision 0.95 \
+  --no-embeddings
+```
+
+Проверить новую выгрузку классификатора:
+
+```bash
+python -m auto_classifier.cli verify \
+  --model "models/model_v1" \
+  --input "my_data/new_classifier_results.xlsx" \
+  --output "my_data/checked_results.xlsx"
+```
+
+Если ставили полный `requirements.txt` и хотите использовать embeddings, уберите `--no-embeddings` из команды `train`.
+
+Важно: чтение `.xlsx` поддерживается даже без `openpyxl` через fallback, но для записи `.xlsx` нужен `openpyxl`. Если его нет, используйте `.csv` в `--output`.
 
 ## Формат данных
 
@@ -666,9 +750,63 @@ accepted_precision >= target_precision
 - Для каждой причины нужны и правильные, и неправильные примеры.
 - Очень маленькие причины будут уходить в `review`.
 - Качество зависит от того, насколько стабильно размечены исторические данные.
+- Если номера причин менялись между итерациями, используйте `subreason_key`,
+  иначе модель может смешать разные смыслы под одним `reason_id`.
 - Если роли в чате не размечены, модель хуже отделяет слова клиента от слов
   оператора.
 - Если в таблице нет `chat_text`, обучение и проверка невозможны.
+
+## Версии Подпричин
+
+`reason_id` - это номер причины внутри конкретного промпта. Если в новой
+итерации причины переименовали, объединили или поменяли порядок, один и тот же
+номер может означать разные вещи. Для этого есть YAML-словарь версий
+подпричин.
+
+Пример:
+
+```yaml
+datasets:
+  kasko_uregulirovanie:
+    files:
+      - "КАСКО - Урегулирование убытков.xlsx"
+    iterations:
+      "итерация 1":
+        reasons:
+          "1": unclear_status_and_communication
+          "4": unclear_status_and_communication
+          "7": unclear_status_and_communication
+      "итерация 2":
+        reasons:
+          "1": unclear_status_and_communication
+```
+
+Так старые причины `1`, `4`, `7` обучаются как одна стабильная подпричина
+`unclear_status_and_communication`.
+
+Подготовить файл с добавленным `subreason_key`:
+
+```bash
+python3 -m auto_classifier.cli prepare \
+  --labels "local_data/labels_normalized/КАСКО - Урегулирование убытков.xlsx" \
+  --messages "local_data/messages/текстовки-КАСКО-Урегулирования.xlsx" \
+  --subreason-map "auto_classifier/configs/subreason_versions.example.yaml" \
+  --output "local_data/prepared/kasko_uregulirovanie_mapped.csv"
+```
+
+Обучаться по стабильным ключам:
+
+```bash
+python3 -m auto_classifier.cli train \
+  --data "local_data/prepared/kasko_uregulirovanie_mapped.csv" \
+  --subreason-map "auto_classifier/configs/subreason_versions.example.yaml" \
+  --group-by-subreason-key \
+  --out "models/kasko_uregulirovanie_stable"
+```
+
+Если для строки нет явного маппинга, ей ставится безопасный ключ вида
+`unmapped::<dataset>::<iteration>::<reason_id>`. Такая строка не смешается с
+другой итерацией случайно.
 
 ## Короткая памятка команд
 

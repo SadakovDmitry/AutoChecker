@@ -94,6 +94,12 @@ def normalize_human_answer(value: object) -> Optional[int]:
         return 0
     if "?" in text:
         return None
+    if text in {"неь", "нкт"}:
+        return 0
+    if re.fullmatch(r"ошибка\s*[-—–]\s*да", text):
+        return 1
+    if re.fullmatch(r"ошибка\s*[-—–]\s*нет", text):
+        return 0
     if text in {"1", "true", "yes", "y", "да", "дa"}:
         return 1
     if text in {"0", "false", "no", "n", "нет"}:

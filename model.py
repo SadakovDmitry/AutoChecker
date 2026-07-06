@@ -194,6 +194,36 @@ def evaluate_low_threshold(
     return float(threshold), no_precision, coverage
 
 
+def choose_rate_matching_threshold(
+    y: Sequence[int],
+    probabilities: Sequence[float],
+) -> Tuple[float, float, float, float]:
+    """Choose yes/no threshold that matches historical positive rate.
+
+    This is used by the experimental full yes/no mode. The threshold is learned
+    on out-of-fold probabilities from previous manual checks, not on the latest
+    evaluation labels.
+    """
+
+    y_arr = np.asarray(y, dtype=int)
+    p_arr = np.asarray(probabilities, dtype=float)
+    if len(y_arr) == 0:
+        return 0.5, 0.0, 0.0, 0.0
+    manual_rate = float(y_arr.mean())
+    thresholds = [1.000001, *sorted(set(float(x) for x in p_arr), reverse=True), -0.000001]
+    best = None
+    for threshold in thresholds:
+        predicted = (p_arr >= threshold).astype(int)
+        predicted_rate = float(predicted.mean())
+        rate_gap = abs(predicted_rate - manual_rate)
+        row_accuracy = float((predicted == y_arr).mean())
+        candidate = (rate_gap, -row_accuracy, -float(threshold), float(threshold), predicted_rate, row_accuracy)
+        if best is None or candidate < best:
+            best = candidate
+    _, _, _, threshold, predicted_rate, row_accuracy = best
+    return threshold, predicted_rate, row_accuracy, abs(predicted_rate - manual_rate)
+
+
 def _final_features(
     *,
     p_lsa: Sequence[float],
@@ -231,6 +261,10 @@ class ReasonValidator:
     n_samples: int
     n_positive: int
     n_negative: int
+    yesno_threshold: float = 0.5
+    yesno_train_predicted_positive_rate: float = 0.0
+    yesno_train_rate_gap: float = 0.0
+    yesno_train_row_label_accuracy: float = 0.0
     warnings: List[str] = field(default_factory=list)
     text_model: Optional[TextVectorClassifier] = None
     embedding_model: Optional[DenseClassifier] = None
@@ -330,6 +364,12 @@ class HybridValidator:
         )
         final_oof = _oof_final_predictions(final_x, y, self.config)
         final_model = _fit_final_classifier(final_x, y, self.config.random_state)
+        (
+            yesno_threshold,
+            yesno_train_predicted_positive_rate,
+            yesno_train_row_label_accuracy,
+            yesno_train_rate_gap,
+        ) = choose_rate_matching_threshold(y, final_oof)
 
         enable_auto_no = bool(getattr(self.config, "enable_auto_no", False))
 
@@ -365,6 +405,10 @@ class HybridValidator:
             no_threshold=float(no_threshold),
             no_threshold_precision=float(no_threshold_precision),
             no_threshold_coverage=float(no_threshold_coverage),
+            yesno_threshold=float(yesno_threshold),
+            yesno_train_predicted_positive_rate=float(yesno_train_predicted_positive_rate),
+            yesno_train_rate_gap=float(yesno_train_rate_gap),
+            yesno_train_row_label_accuracy=float(yesno_train_row_label_accuracy),
             n_samples=int(len(frame)),
             n_positive=int(n_positive),
             n_negative=int(n_negative),
@@ -507,6 +551,14 @@ class HybridValidator:
                     "no_threshold": getattr(validator, "no_threshold", -0.000001),
                     "no_threshold_precision": getattr(validator, "no_threshold_precision", 0.0),
                     "no_threshold_coverage": getattr(validator, "no_threshold_coverage", 0.0),
+                    "yesno_threshold": getattr(validator, "yesno_threshold", 0.5),
+                    "yesno_train_predicted_positive_rate": getattr(
+                        validator, "yesno_train_predicted_positive_rate", 0.0
+                    ),
+                    "yesno_train_rate_gap": getattr(validator, "yesno_train_rate_gap", 0.0),
+                    "yesno_train_row_label_accuracy": getattr(
+                        validator, "yesno_train_row_label_accuracy", 0.0
+                    ),
                     "n_samples": validator.n_samples,
                     "n_positive": validator.n_positive,
                     "n_negative": validator.n_negative,

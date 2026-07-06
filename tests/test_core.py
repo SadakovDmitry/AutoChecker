@@ -8,6 +8,11 @@ from auto_classifier.data import DataFormatError, load_tables, normalize_human_a
 from auto_classifier.model import HybridValidator, choose_low_threshold, evaluate_low_threshold
 from auto_classifier.config import ValidatorConfig
 from auto_classifier.prepare import normalize_messages_table, prepare_training_data
+from auto_classifier.subreason_mapping import (
+    apply_subreason_mapping,
+    load_subreason_mapping,
+    use_subreason_key_as_reason_id,
+)
 from auto_classifier.text import split_roles
 
 
@@ -118,6 +123,47 @@ class DataTests(unittest.TestCase):
         self.assertEqual(chats["bot_message_count"].iloc[0], 1)
         self.assertIn("client: хочу продлить", chats["chat_text"].iloc[0])
         self.assertIn("manager: поможем", chats["chat_text"].iloc[0])
+
+    def test_subreason_mapping_merges_old_reasons(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            mapping_path = Path(tmp) / "map.yaml"
+            mapping_path.write_text(
+                """
+datasets:
+  kasko_uregulirovanie:
+    files:
+      - labels.xlsx
+    iterations:
+      "итерация 1":
+        reasons:
+          "1": unclear_status_and_communication
+          "4": unclear_status_and_communication
+          "7": unclear_status_and_communication
+          "2": service_selection_change
+""",
+                encoding="utf-8",
+            )
+            mapping = load_subreason_mapping(str(mapping_path))
+            frame = pd.DataFrame(
+                {
+                    "chat_id": ["T1", "T2", "T3"],
+                    "reason_id": ["1", "4", "2"],
+                    "_source_file": ["/tmp/labels.xlsx"] * 3,
+                    "_source_sheet": ["итерация 1"] * 3,
+                }
+            )
+            mapped = apply_subreason_mapping(frame, mapping)
+            self.assertEqual(
+                mapped["subreason_key"].tolist(),
+                [
+                    "unclear_status_and_communication",
+                    "unclear_status_and_communication",
+                    "service_selection_change",
+                ],
+            )
+            grouped = use_subreason_key_as_reason_id(mapped)
+            self.assertEqual(grouped["reason_id"].iloc[0], "unclear_status_and_communication")
+            self.assertEqual(grouped["original_reason_id"].iloc[0], "1")
 
 
 class ModelTests(unittest.TestCase):
