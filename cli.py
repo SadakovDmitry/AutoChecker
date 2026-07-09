@@ -293,6 +293,53 @@ def build_parser() -> argparse.ArgumentParser:
     hybrid.add_argument("--max-history-std", type=float, default=0.05)
     hybrid.add_argument("--max-model-history-gap", type=float, default=0.35)
     hybrid.add_argument("--min-estimated-accuracy", type=float, default=0.70)
+    hybrid.add_argument(
+        "--min-full-mean-p-correct",
+        type=float,
+        default=0.65,
+        help=(
+            "Minimum current mean p_correct for a subreason required to allow "
+            "full yes/no. This prevents strong history from overriding a weak new batch."
+        ),
+    )
+    hybrid.add_argument(
+        "--min-full-train-row-accuracy",
+        type=float,
+        default=0.65,
+        help=(
+            "Minimum past row-level accuracy of the personal p_correct threshold "
+            "required to allow full yes/no for a subreason."
+        ),
+    )
+    hybrid.add_argument(
+        "--max-full-train-rate-gap",
+        type=float,
+        default=0.05,
+        help=(
+            "Maximum allowed historical positive-rate gap for the personal "
+            "p_correct threshold before routing the subreason to safe mode."
+        ),
+    )
+    hybrid.add_argument(
+        "--estimate-strategy",
+        choices=("max-history-latest", "guarded-bayes"),
+        default="max-history-latest",
+        help=(
+            "How to estimate subreason prompt accuracy for routing. "
+            "max-history-latest uses max(mean p_correct, latest subreason history); "
+            "guarded-bayes uses the older guarded Bayes estimate."
+        ),
+    )
+    hybrid.add_argument(
+        "--full-yesno-strategy",
+        choices=("threshold", "legacy_quota"),
+        default="threshold",
+        help=(
+            "How low-risk subreasons are fully labeled. "
+            "threshold uses personal p_correct cutoff per subreason. "
+            "legacy_quota keeps old top-N behavior only for reproducing old experiments."
+        ),
+    )
     _add_subreason_args(hybrid)
 
     return parser
@@ -567,6 +614,11 @@ def cmd_evaluate_hybrid_router(args: argparse.Namespace) -> int:
         max_history_std=args.max_history_std,
         max_model_history_gap=args.max_model_history_gap,
         min_estimated_accuracy=args.min_estimated_accuracy,
+        min_full_mean_p_correct=args.min_full_mean_p_correct,
+        min_full_train_row_accuracy=args.min_full_train_row_accuracy,
+        max_full_train_rate_gap=args.max_full_train_rate_gap,
+        full_yesno_strategy=args.full_yesno_strategy,
+        estimate_strategy=args.estimate_strategy.replace("-", "_"),
     )
     write_hybrid_router_report(result, args.output)
     print(f"Wrote hybrid router report to {args.output}")

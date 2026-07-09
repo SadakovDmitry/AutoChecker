@@ -450,6 +450,81 @@ def _guarded_bayes_summary(
     return summary
 
 
+def _max_history_latest_summary(
+    predictions: pd.DataFrame,
+    train_frame: pd.DataFrame,
+) -> pd.DataFrame:
+    """Estimate prompt accuracy as max(current mean p_correct, latest subreason history)."""
+
+    history_latest, history_counts = _history_rates(train_frame, latest=True)
+    topic_rate = _topic_rate(train_frame)
+    rows = []
+    for reason_id, group in predictions.groupby("reason_id", sort=True):
+        key = _normalize_reason(reason_id)
+        n_rows = int(len(group))
+        mean_p = float(group["p_correct"].astype(float).mean()) if n_rows else 0.0
+        hist = float(history_latest.get(key, topic_rate))
+        estimated = max(0.0, min(1.0, max(mean_p, hist)))
+        item = {
+            "reason_id": key,
+            "rows": n_rows,
+            "mean_p_correct": mean_p,
+            "history_latest_rate": hist,
+            "history_rows": int(history_counts.get(key, 0)),
+            "topic_history_rate": topic_rate,
+            "guarded_bayes_k40": np.nan,
+            "guarded_offset": np.nan,
+            "estimate_strategy": "max_history_latest",
+            "estimated_prompt_accuracy": estimated,
+            "estimated_yes": int(np.floor(estimated * n_rows + 0.5)),
+            "estimated_no": n_rows - int(np.floor(estimated * n_rows + 0.5)),
+        }
+        if "human_label" in group.columns and group["human_label"].isin([0, 1]).any():
+            human = group[group["human_label"].isin([0, 1])]["human_label"].astype(int)
+            manual = float(human.mean())
+            item.update(
+                {
+                    "manual_prompt_accuracy": manual,
+                    "accuracy_gap_pp": (estimated - manual) * 100,
+                    "abs_accuracy_gap_pp": abs(estimated - manual) * 100,
+                    "manual_yes": int(human.sum()),
+                    "manual_no": int((human == 0).sum()),
+                }
+            )
+        rows.append(item)
+    summary = pd.DataFrame(rows)
+    if summary.empty:
+        return summary
+    if "manual_prompt_accuracy" in summary.columns:
+        valid = summary[summary["manual_prompt_accuracy"].notna()].copy()
+        if not valid.empty:
+            total_rows = int(valid["rows"].sum())
+            manual = float((valid["manual_prompt_accuracy"] * valid["rows"]).sum() / total_rows)
+            estimated = float((valid["estimated_prompt_accuracy"] * valid["rows"]).sum() / total_rows)
+            abs_gap = float((valid["abs_accuracy_gap_pp"] * valid["rows"]).sum() / total_rows)
+            overall = {
+                "reason_id": "__overall_weighted__",
+                "rows": total_rows,
+                "mean_p_correct": float((valid["mean_p_correct"] * valid["rows"]).sum() / total_rows),
+                "history_latest_rate": np.nan,
+                "history_rows": int(valid["history_rows"].sum()),
+                "topic_history_rate": topic_rate,
+                "guarded_bayes_k40": np.nan,
+                "guarded_offset": np.nan,
+                "estimate_strategy": "max_history_latest",
+                "estimated_prompt_accuracy": estimated,
+                "estimated_yes": int(valid["estimated_yes"].sum()),
+                "estimated_no": int(valid["estimated_no"].sum()),
+                "manual_prompt_accuracy": manual,
+                "accuracy_gap_pp": (estimated - manual) * 100,
+                "abs_accuracy_gap_pp": abs_gap,
+                "manual_yes": int(valid["manual_yes"].sum()),
+                "manual_no": int(valid["manual_no"].sum()),
+            }
+            summary = pd.concat([summary, pd.DataFrame([overall])], ignore_index=True)
+    return summary
+
+
 def learn_guarded_bayes_offset(
     train_frame: pd.DataFrame,
     *,
@@ -553,8 +628,17 @@ def build_hybrid_risk_summary(
     max_history_std: float = 0.18,
     max_model_history_gap: float = 0.25,
     min_estimated_accuracy: float = 0.65,
+    min_full_mean_p_correct: float = 0.65,
+    yesno_thresholds: Optional[pd.DataFrame] = None,
+    min_full_train_row_accuracy: float = 0.65,
+    max_full_train_rate_gap: float = 0.05,
 ) -> pd.DataFrame:
     std_map = _history_rate_std(train_frame)
+    yesno_map = (
+        yesno_thresholds.set_index("reason_id").to_dict(orient="index")
+        if yesno_thresholds is not None and not yesno_thresholds.empty
+        else {}
+    )
     rows = []
     detail = guarded_summary[guarded_summary["reason_id"] != "__overall_weighted__"].copy()
     for _, row in detail.iterrows():
@@ -564,6 +648,9 @@ def build_hybrid_risk_summary(
         history_rate = float(row.get("history_latest_rate", np.nan))
         estimated = float(row.get("estimated_prompt_accuracy", 0.0) or 0.0)
         history_std = float(std_map.get(reason_id, 0.0))
+        yesno_info = yesno_map.get(reason_id, {})
+        full_train_row_accuracy = float(yesno_info.get("train_row_label_accuracy", np.nan))
+        full_train_rate_gap = float(yesno_info.get("train_rate_gap_pp", np.nan)) / 100
         gap = abs(mean_p - history_rate) if not np.isnan(history_rate) else 1.0
         flags = []
         if reason_id.startswith("unmapped::"):
@@ -576,6 +663,14 @@ def build_hybrid_risk_summary(
             flags.append("model_history_disagreement")
         if estimated < min_estimated_accuracy:
             flags.append("low_estimated_accuracy")
+        if mean_p < min_full_mean_p_correct:
+            flags.append("low_current_model_confidence")
+        if np.isnan(full_train_row_accuracy):
+            flags.append("missing_full_yesno_quality")
+        elif full_train_row_accuracy < min_full_train_row_accuracy:
+            flags.append("weak_full_yesno_quality")
+        if not np.isnan(full_train_rate_gap) and full_train_rate_gap > max_full_train_rate_gap:
+            flags.append("full_yesno_rate_gap")
         mode = "safe_auto_yes" if flags else "full_yesno"
         rows.append(
             {
@@ -589,6 +684,8 @@ def build_hybrid_risk_summary(
                 "history_latest_rate": history_rate,
                 "model_history_gap": gap,
                 "estimated_prompt_accuracy": estimated,
+                "full_train_row_accuracy": full_train_row_accuracy,
+                "full_train_rate_gap": full_train_rate_gap,
             }
         )
     return pd.DataFrame(rows)
@@ -598,7 +695,15 @@ def apply_hybrid_router(
     raw_predictions: pd.DataFrame,
     guarded_summary: pd.DataFrame,
     risk_summary: pd.DataFrame,
+    *,
+    full_yesno_strategy: str = "threshold",
+    yesno_thresholds: Optional[pd.DataFrame] = None,
+    global_yesno_threshold: float = 0.5,
 ) -> pd.DataFrame:
+    if full_yesno_strategy == "quota":
+        full_yesno_strategy = "legacy_quota"
+    if full_yesno_strategy not in {"legacy_quota", "threshold"}:
+        raise ValueError("full_yesno_strategy must be 'threshold' or 'legacy_quota'")
     risk_map = risk_summary.set_index("reason_id").to_dict(orient="index") if not risk_summary.empty else {}
     estimate_map = (
         guarded_summary[guarded_summary["reason_id"] != "__overall_weighted__"]
@@ -606,6 +711,11 @@ def apply_hybrid_router(
         .astype(float)
         .to_dict()
         if not guarded_summary.empty
+        else {}
+    )
+    threshold_map = (
+        yesno_thresholds.set_index("reason_id")["learned_yesno_threshold"].astype(float).to_dict()
+        if yesno_thresholds is not None and not yesno_thresholds.empty
         else {}
     )
     outputs = []
@@ -616,24 +726,36 @@ def apply_hybrid_router(
         mode = str(risk.get("mode", "safe_auto_yes"))
         group["hybrid_mode"] = mode
         group["risk_flags"] = str(risk.get("risk_flags", "unknown_reason"))
+        group["full_yesno_strategy"] = full_yesno_strategy if mode == "full_yesno" else ""
         if mode == "full_yesno":
             estimated = max(0.0, min(1.0, float(estimate_map.get(key, 0.0))))
-            yes_count = int(np.floor(estimated * len(group) + 0.5))
-            yes_count = max(0, min(len(group), yes_count))
-            ordered = group.sort_values(
-                ["p_correct", "nearest_positive_score", "nearest_negative_score"],
-                ascending=[False, False, True],
-                kind="mergesort",
-            )
-            yes_index = set(ordered.head(yes_count).index)
-            is_yes = group.index.to_series().map(lambda idx: idx in yes_index).to_numpy()
             group["estimated_prompt_accuracy"] = estimated
-            group["decision"] = np.where(is_yes, "hybrid_yes", "hybrid_no")
+            if full_yesno_strategy == "threshold":
+                threshold = float(threshold_map.get(key, global_yesno_threshold))
+                is_yes = group["p_correct"].astype(float).to_numpy() >= threshold
+                group["hybrid_yesno_threshold"] = threshold
+                group["estimated_yes_count"] = int(is_yes.sum())
+                group["decision"] = np.where(is_yes, "hybrid_threshold_yes", "hybrid_threshold_no")
+            else:
+                yes_count = int(np.floor(estimated * len(group) + 0.5))
+                yes_count = max(0, min(len(group), yes_count))
+                ordered = group.sort_values(
+                    ["p_correct", "nearest_positive_score", "nearest_negative_score"],
+                    ascending=[False, False, True],
+                    kind="mergesort",
+                )
+                yes_index = set(ordered.head(yes_count).index)
+                is_yes = group.index.to_series().map(lambda idx: idx in yes_index).to_numpy()
+                group["hybrid_yesno_threshold"] = np.nan
+                group["estimated_yes_count"] = yes_count
+                group["decision"] = np.where(is_yes, "hybrid_yes", "hybrid_no")
             group["auto_answer"] = np.where(is_yes, "да", "нет")
             group["auto_label"] = np.where(is_yes, 1, 0)
         else:
             is_yes = group["decision"].eq("auto_yes").to_numpy()
             group["estimated_prompt_accuracy"] = np.nan
+            group["hybrid_yesno_threshold"] = np.nan
+            group["estimated_yes_count"] = np.nan
             group["decision"] = np.where(is_yes, "hybrid_safe_yes", "review")
             group["auto_answer"] = np.where(is_yes, "да", "review")
             group["auto_label"] = np.where(is_yes, 1, np.nan)
@@ -764,30 +886,54 @@ def run_hybrid_router_experiment(
     max_history_std: float = 0.18,
     max_model_history_gap: float = 0.25,
     min_estimated_accuracy: float = 0.65,
+    min_full_mean_p_correct: float = 0.65,
+    min_full_train_row_accuracy: float = 0.65,
+    max_full_train_rate_gap: float = 0.05,
+    full_yesno_strategy: str = "threshold",
+    estimate_strategy: str = "max_history_latest",
 ) -> HybridRouterResult:
-    learned_offset, offset_summary = learn_guarded_bayes_offset(
-        train_frame,
-        config=config,
-        k=k,
-        guard_gap=guard_gap,
-        min_offset=min_offset,
-        max_offset=max_offset,
-    )
-    if offset is None:
-        offset = learned_offset
+    if estimate_strategy not in {"max_history_latest", "guarded_bayes"}:
+        raise ValueError("estimate_strategy must be 'max_history_latest' or 'guarded_bayes'")
+    if estimate_strategy == "guarded_bayes":
+        learned_offset, offset_summary = learn_guarded_bayes_offset(
+            train_frame,
+            config=config,
+            k=k,
+            guard_gap=guard_gap,
+            min_offset=min_offset,
+            max_offset=max_offset,
+        )
+        if offset is None:
+            offset = learned_offset
+        else:
+            offset_summary = offset_summary.copy()
+            offset_summary["offset"] = float(offset)
+            offset_summary["source"] = "manual_cli_offset"
     else:
-        offset_summary = offset_summary.copy()
-        offset_summary["offset"] = float(offset)
-        offset_summary["source"] = "manual_cli_offset"
+        offset = 0.0 if offset is None else float(offset)
+        offset_summary = pd.DataFrame(
+            [
+                {
+                    "offset": float(offset),
+                    "source": "not_used_for_max_history_latest",
+                    "calibration_rows": 0,
+                    "calibration_subreasons": 0,
+                }
+            ]
+        )
     model = HybridValidator.train(train_frame, config)
     raw_predictions = model.predict(evaluation_frame)
-    guarded_summary = _guarded_bayes_summary(
-        raw_predictions,
-        train_frame,
-        offset=float(offset),
-        k=k,
-        guard_gap=guard_gap,
-    )
+    yesno_thresholds = learned_thresholds_from_model(model)
+    if estimate_strategy == "max_history_latest":
+        guarded_summary = _max_history_latest_summary(raw_predictions, train_frame)
+    else:
+        guarded_summary = _guarded_bayes_summary(
+            raw_predictions,
+            train_frame,
+            offset=float(offset),
+            k=k,
+            guard_gap=guard_gap,
+        )
     risk_summary = build_hybrid_risk_summary(
         guarded_summary,
         train_frame,
@@ -795,8 +941,18 @@ def run_hybrid_router_experiment(
         max_history_std=max_history_std,
         max_model_history_gap=max_model_history_gap,
         min_estimated_accuracy=min_estimated_accuracy,
+        min_full_mean_p_correct=min_full_mean_p_correct,
+        yesno_thresholds=yesno_thresholds,
+        min_full_train_row_accuracy=min_full_train_row_accuracy,
+        max_full_train_rate_gap=max_full_train_rate_gap,
     )
-    predictions = apply_hybrid_router(raw_predictions, guarded_summary, risk_summary)
+    predictions = apply_hybrid_router(
+        raw_predictions,
+        guarded_summary,
+        risk_summary,
+        full_yesno_strategy=full_yesno_strategy,
+        yesno_thresholds=yesno_thresholds,
+    )
     summary = build_hybrid_summary(predictions, risk_summary)
     return HybridRouterResult(
         predictions=predictions,
