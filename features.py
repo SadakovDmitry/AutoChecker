@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -54,7 +55,10 @@ class TextVectorClassifier:
         if len(texts) >= 20 and n_features > 3 and max_components >= 2:
             n_components = min(max_components, n_features - 1)
             self.svd = TruncatedSVD(n_components=n_components, random_state=self.random_state)
-            x_model = self.svd.fit_transform(x_tfidf)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning, module=r"sklearn\.utils\.extmath")
+                x_model = self.svd.fit_transform(x_tfidf)
+            x_model = np.nan_to_num(x_model, nan=0.0, posinf=0.0, neginf=0.0)
         else:
             self.svd = None
             x_model = x_tfidf
@@ -75,7 +79,10 @@ class TextVectorClassifier:
             raise RuntimeError("TextVectorClassifier is not fitted")
         x_tfidf = self.vectorizer.transform(_safe_texts(texts))
         if self.svd is not None:
-            return self.svd.transform(x_tfidf)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=RuntimeWarning, module=r"sklearn\.utils\.extmath")
+                vectors = self.svd.transform(x_tfidf)
+            return np.nan_to_num(vectors, nan=0.0, posinf=0.0, neginf=0.0)
         return x_tfidf
 
     def predict_proba(self, texts: Sequence[str]) -> np.ndarray:

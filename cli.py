@@ -7,6 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from .analyst_workflow import (
+    DEFAULT_SUBREASON_MAP,
+    autolabel_latest_iteration,
+)
 from .config import ValidatorConfig, load_rules
 from .data import DataFormatError, load_tables
 from .model import HybridValidator
@@ -342,6 +346,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_subreason_args(hybrid)
 
+    autolabel = subparsers.add_parser(
+        "autolabel-latest",
+        help=(
+            "Analyst-friendly workflow: take a workbook with prompt iterations, "
+            "train on all previous labeled sheets, and mark the last/unlabeled sheet "
+            "with the best hybrid router."
+        ),
+    )
+    autolabel.add_argument("--labels", required=True, help="Excel workbook with iteration sheets.")
+    autolabel.add_argument("--messages", required=True, help="Chat transcript export.")
+    autolabel.add_argument("--output", required=True, help="Output .xlsx with marked latest iteration.")
+    autolabel.add_argument(
+        "--dataset",
+        default=None,
+        help="Dataset key from configs/subreason_versions.yaml, for example kasko_oformlenie.",
+    )
+    autolabel.add_argument(
+        "--latest-sheet",
+        default=None,
+        help="Latest/unlabeled sheet. If omitted, the last workbook sheet is used.",
+    )
+    autolabel.add_argument(
+        "--messages-sheet",
+        default=None,
+        help="Optional sheet with chat transcripts.",
+    )
+    autolabel.add_argument(
+        "--subreason-map",
+        default=str(DEFAULT_SUBREASON_MAP),
+        help="YAML mapping with stable subreason keys.",
+    )
+    autolabel.add_argument(
+        "--embedding-model",
+        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    )
+    autolabel.add_argument("--use-embeddings", action="store_true", help="Use local sentence-transformers model.")
+    autolabel.add_argument("--target-precision", type=float, default=0.80)
+
     return parser
 
 
@@ -637,6 +679,36 @@ def cmd_evaluate_hybrid_router(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_autolabel_latest(args: argparse.Namespace) -> int:
+    result = autolabel_latest_iteration(
+        labels_path=args.labels,
+        messages_path=args.messages,
+        output_path=args.output,
+        dataset_key=args.dataset,
+        latest_sheet=args.latest_sheet,
+        messages_sheet=args.messages_sheet,
+        subreason_map=args.subreason_map,
+        embedding_model=args.embedding_model,
+        use_embeddings=args.use_embeddings,
+        target_precision=args.target_precision,
+    )
+    print(f"Wrote marked latest iteration to {result.output_path}")
+    print(
+        "latest_sheet={}; train_rows={}; latest_rows={}; auto_rows={}; "
+        "review_rows={}; auto_yes={}; auto_no={}; coverage={:.2%}".format(
+            result.latest_sheet,
+            result.train_rows,
+            result.latest_rows,
+            result.auto_rows,
+            result.review_rows,
+            result.auto_yes,
+            result.auto_no,
+            result.coverage,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     warnings.filterwarnings(
         "ignore",
@@ -660,6 +732,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_evaluate_guarded_yesno(args)
         if args.command == "evaluate-hybrid-router":
             return cmd_evaluate_hybrid_router(args)
+        if args.command == "autolabel-latest":
+            return cmd_autolabel_latest(args)
     except (DataFormatError, FileNotFoundError, RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
